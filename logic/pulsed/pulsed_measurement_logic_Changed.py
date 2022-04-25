@@ -159,7 +159,7 @@ class PulsedMeasurementLogic(GenericLogic):
         # Create an instance of PulseExtractor
         self._pulseextractor = PulseExtractor(pulsedmeasurementlogic=self)
         self._pulseanalyzer = PulseAnalyzer(pulsedmeasurementlogic=self)
-        #print('PML/onActivate/162')
+        print('PML/onActivate/162')
 
         # QTimer must be created here instead of __init__ because otherwise the timer will not run
         # in this logic's thread but in the manager instead.
@@ -182,32 +182,32 @@ class PulsedMeasurementLogic(GenericLogic):
 
         # Check and configure fast counter
         binning_constraints = self.fastcounter().get_constraints()['hardware_binwidth_list']
-        #print('PML/onActivate/185')
+        print('PML/onActivate/185')        
         if self.__fast_counter_binwidth not in binning_constraints:
             self.__fast_counter_binwidth = binning_constraints[0]
-        #print('PML/onActivate/187')
+        print('PML/onActivate/187')        
         if self.__fast_counter_record_length <= 0:
             self.__fast_counter_record_length = 3e-6
         self.fast_counter_off()
-        #print('PML/onActivate/190')
+        print('PML/onActivate/190')        		
         # Set default number of gates to a reasonable number for gated counters (>0 if gated)
         if self.fastcounter().is_gated() and self.__fast_counter_gates < 1:
             self.__fast_counter_gates = max(1, self._number_of_lasers)
         self.set_fast_counter_settings()
-       # print('PML/onActivate/194')
+        print('PML/onActivate/194')        
         # Check and configure external microwave
         if self.__use_ext_microwave:
             self.microwave_off()
             self.set_microwave_settings(frequency=self.__microwave_freq,
                                         power=self.__microwave_power,
                                         use_ext_microwave=True)
-        #print('PML/onActivate/201')
+        print('PML/onActivate/201')
         # Convert controlled variable list into numpy.ndarray
         self._controlled_variable = np.array(self._controlled_variable, dtype=float)
-       # print('PML/onActivate/204')
+        print('PML/onActivate/204')
         # initialize arrays for the measurement data
         self._initialize_data_arrays()
-        #print('PML/onActivate/207')
+        print('PML/onActivate/207')
         # recalled saved raw data dict key
         self._recalled_raw_data_tag = None
 
@@ -269,10 +269,9 @@ class PulsedMeasurementLogic(GenericLogic):
         @return:
         """
         # Check if fast counter is running and do nothing if that is the case
-        print(self.fastcounter().get_status())
         counter_status = self.fastcounter().get_status()
-        #print(counter_status)
-        #print(kwargs)
+        print(counter_status)
+        print(kwargs)
         if not counter_status >= 2 and not counter_status < 0:
             # Determine complete settings dictionary
             if not isinstance(settings_dict, dict):
@@ -290,7 +289,7 @@ class PulsedMeasurementLogic(GenericLogic):
                     self.__fast_counter_gates = int(settings_dict['number_of_gates'])
                 else:
                     self.__fast_counter_gates = 0
-            #print('PML/set_fast_counter_settings/292')
+            print('PML/set_fast_counter_settings/292')
             # Apply the settings to hardware
             self.__fast_counter_binwidth, \
             self.__fast_counter_record_length, \
@@ -1160,13 +1159,10 @@ class PulsedMeasurementLogic(GenericLogic):
         self.raw_data = fc_data
         self.__elapsed_sweeps = info_dict['elapsed_sweeps']
         self.__elapsed_time = info_dict['elapsed_time']
-        #print('elpased sweep and time was read')
 
         # extract laser pulses from raw data
         return_dict = self._pulseextractor.extract_laser_pulses(self.raw_data)
         self.laser_data = return_dict['laser_counts_arr']
-        #print('self.laser_data')
-        #print(self.laser_data)
         return
 
     def _analyze_laser_pulses(self):
@@ -1189,8 +1185,7 @@ class PulsedMeasurementLogic(GenericLogic):
         """
         # get raw data from fast counter
         fc_data = self.fastcounter().get_data_trace()
-        #print('pulsed/getrawdata/fcdata')
-        #print(fc_data)
+        print(fc_data)
         if type(fc_data) == tuple and len(fc_data) == 2:  # if the hardware implement the new version of the interface
             fc_data, info_dict = fc_data
         else:
@@ -1226,23 +1221,24 @@ class PulsedMeasurementLogic(GenericLogic):
         elif not fc_data.any():
             self.log.warning('Only zeros received from fast counter!')
             fc_data = np.zeros(fc_data.shape, dtype='int64')
-        #print('pulseLogic/fc_data')
-        #print(fc_data)
+
         return fc_data, {'elapsed_sweeps': elapsed_sweeps, 'elapsed_time': elapsed_time}
 
     def _initialize_data_arrays(self):
         """
-        Initializing the signal, error, laser and raw data arrays. this is started as soon as the measureent start
+        Initializing the signal, error, laser and raw data arrays.
         """
         # Determine signal array dimensions
         signal_dim = 3 if self._alternating else 2
-        #print('pulsedMlogic\Measurement Initilized for array data')
+        print('hossein24')
 
         self.signal_data = np.zeros((signal_dim, len(self._controlled_variable)), dtype=float)
         self.signal_data[0] = self._controlled_variable
+        print('hossein23')
 
         self.signal_alt_data = np.zeros((signal_dim, len(self._controlled_variable)), dtype=float)
         self.signal_alt_data[0] = self._controlled_variable
+        print('hossein21')
 
         self.measurement_error = np.zeros((signal_dim, len(self._controlled_variable)), dtype=float)
         self.measurement_error[0] = self._controlled_variable
@@ -1250,14 +1246,16 @@ class PulsedMeasurementLogic(GenericLogic):
         number_of_bins = int(self.__fast_counter_record_length / self.__fast_counter_binwidth)
         laser_length = number_of_bins if self.__fast_counter_gates > 0 else 500
         self.laser_data = np.zeros((self._number_of_lasers, laser_length), dtype='int64')
+        print('hossein26')
 
         if self.__fast_counter_gates > 0:
             self.raw_data = np.zeros((self._number_of_lasers, number_of_bins), dtype='int64')
         else:
             self.raw_data = np.zeros(number_of_bins, dtype='int64')
-            #print(number_of_bins)
+        print('hossein3423')
         self.sigMeasurementDataUpdated.emit()
-
+        print('hossein342')
+		
         return
 
     # FIXME: Revise everything below
@@ -1585,8 +1583,7 @@ class PulsedMeasurementLogic(GenericLogic):
 
         # prepare the data in a dict or in an OrderedDict:
         data = OrderedDict()
-       #raw_trace = self.raw_data.astype('int64')
-        raw_trace = self.raw_data
+        raw_trace = self.raw_data.astype('int64')
         data['Signal(counts)'] = raw_trace.transpose()
         # write the parameters:
         parameters = OrderedDict()
@@ -1598,7 +1595,7 @@ class PulsedMeasurementLogic(GenericLogic):
         parameters['Controlled variable'] = list(self.signal_data[0])
 
         self.savelogic().save_data(data, timestamp=timestamp,
-                                   parameters=parameters, fmt='%.7f',
+                                   parameters=parameters, fmt='%d',
                                    filepath=filepath, filelabel=filelabel,
                                    filetype=self._raw_data_save_type,
                                    delimiter='\t')

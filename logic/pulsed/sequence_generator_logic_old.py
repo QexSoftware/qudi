@@ -80,9 +80,9 @@ class SequenceGeneratorLogic(GenericLogic):
                                                             ('sync_channel', ''),
                                                             ('gate_channel', ''),
                                                             ('microwave_channel', 'a_ch1'),
-                                                            ('microwave_frequency', 2.789e9),
+                                                            ('microwave_frequency', 2.87e9),
                                                             ('microwave_amplitude', 0.0),
-                                                            ('rabi_period', 250e-9),
+                                                            ('rabi_period', 100e-9),
                                                             ('laser_length', 3e-6),
                                                             ('laser_delay', 500e-9),
                                                             ('wait_time', 1e-6),
@@ -1737,12 +1737,6 @@ class SequenceGeneratorLogic(GenericLogic):
             else:
                 self.log.warn('Extending waveform {0} by {2} bins. New length {1}.'.format(
                     ensemble.name, ensemble_info['number_of_samples'], extension_samples))
-
-        # Non-sampling pulsers may have all they need to generate the pulse pattern at this point
-        if self.pulsegenerator().set_pulse_ensemble(ensemble.name, ensemble_info):
-            self.sigLoadedAssetUpdated.emit(*self.loaded_asset)
-            self.log.info("Successfully loaded pulse sequence '{}'".format(ensemble.name))
-            # let the rest of the loading continue so that measurement etc are set up
 
         # Calculate the byte size per sample.
         # One analog sample per channel is 4 bytes (np.float32) and one digital sample per channel

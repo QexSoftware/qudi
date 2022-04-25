@@ -203,7 +203,10 @@ class PulseExtractor(PulseExtractorBase):
         return settings_dict
 
     def extract_laser_pulses(self, count_data):
+        #print('pulseExtract/extract_laser_pulses')
+        #print(count_data)
         """
+
         Wrapper method to call the currently selected extraction method with count_data and the
         appropriate keyword arguments.
 
@@ -223,6 +226,7 @@ class PulseExtractor(PulseExtractorBase):
         else:
             extraction_method = self._ungated_extraction_methods[self._current_extraction_method]
         kwargs = self._get_extraction_method_kwargs(extraction_method)
+        #print(extraction_method(count_data=count_data, **kwargs)) # it will calculate the rising and falling based on the # of laser
         return extraction_method(count_data=count_data, **kwargs)
 
     def _get_extraction_method_kwargs(self, method):

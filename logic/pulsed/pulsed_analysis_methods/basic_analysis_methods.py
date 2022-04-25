@@ -31,8 +31,63 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def analyse_mean_norm(self, laser_data, signal_start=0.0, signal_end=200e-9, norm_start=300e-9,
-                          norm_end=500e-9):
+    def analyse_mean_norm(self, laser_data, signal_start=4e-6, signal_end=10e-6, norm_start=66e-6,
+                          norm_end=94e-6):
+        """
+
+        @param laser_data:
+        @param signal_start:
+        @param signal_end:
+        @param norm_start:
+        @param norm_end:
+        @return:
+        """
+        # Get number of lasers
+        num_of_lasers = laser_data.shape[0]
+        # Get counter bin width
+        bin_width = self.fast_counter_settings.get('bin_width')
+
+        if not isinstance(bin_width, float):
+            return np.zeros(num_of_lasers), np.zeros(num_of_lasers)
+
+        # Convert the times in seconds to bins (i.e. array indices)
+        signal_start_bin = round(signal_start / bin_width)
+        signal_end_bin = round(signal_end / bin_width)
+        norm_start_bin = round(norm_start / bin_width)
+        norm_end_bin = round(norm_end / bin_width)
+
+        # initialize data arrays for signal and measurement error
+        signal_data = np.empty(num_of_lasers, dtype=float)
+        error_data = np.empty(num_of_lasers, dtype=float)
+
+        # loop over all laser pulses and analyze them
+        for ii, laser_arr in enumerate(laser_data):
+            # calculate the sum and mean of the data in the normalization window
+            tmp_data = laser_arr[norm_start_bin:norm_end_bin]
+            reference_sum = np.sum(tmp_data)
+            reference_mean = (reference_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
+
+            # calculate the sum and mean of the data in the signal window
+            tmp_data = laser_arr[signal_start_bin:signal_end_bin]
+            signal_sum = np.sum(tmp_data)
+            signal_mean = (signal_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
+
+            # Calculate normalized signal while avoiding division by zero
+            if reference_mean > 0 and signal_mean >= 0:
+                signal_data[ii] = signal_mean / reference_mean
+            else:
+                signal_data[ii] = 0.0
+
+            # Calculate measurement error while avoiding division by zero
+            if reference_sum > 0 and signal_sum > 0:
+                # calculate with respect to gaussian error 'evolution'
+                error_data[ii] = signal_data[ii] * np.sqrt(1 / signal_sum + 1 / reference_sum)
+            else:
+                error_data[ii] = 0.0
+
+        return signal_data, error_data
+    def analyse_mean_norm(self, laser_data, signal_start=4e-6, signal_end=10e-6, norm_start=66e-6,
+                          norm_end=94e-6):
         """
 
         @param laser_data:
@@ -87,13 +142,16 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
 
         return signal_data, error_data
 
-    def analyse_sum(self, laser_data, signal_start=0.0, signal_end=200e-9):
+    def analyse_sum(self, laser_data, signal_start=4e-6, signal_end=10e-6):
         """
         @param laser_data:
         @param signal_start:
         @param signal_end:
         @return:
         """
+        #print('laser_data')
+        #print(laser_data)
+        #print('laser_data')
         # Get number of lasers
         num_of_lasers = laser_data.shape[0]
         # Get counter bin width
@@ -178,13 +236,85 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
         @return numpy.ndarray, numpy.ndarray: analyzed data per laser pulse, error per laser pulse
         """
         length = len(laser_data)
+        #print('laser length')
+        #print(laser_data)
         if len(np.shape(laser_data)) > 1:
             data = np.mean(laser_data, axis=1)
         else:
             data = np.ravel(laser_data)
         return data, np.zeros_like(length)
 
-    def analyse_mean_reference(self, laser_data, signal_start=0.0, signal_end=200e-9, norm_start=300e-9,
+    def analyse_mean_reference(self, laser_data, signal_start=4e-6, signal_end=10e-6, norm_start=66e-6,
+                          norm_end=94e-6):
+        """
+        This method takes the mean of the signal window.
+        It then does not divide by the background window to normalize
+        but rather substracts the background window to generate the output.
+
+        @param 2D numpy.ndarray laser_data: the raw timetrace data from a gated fast counter
+                                            dim 0: gate number; dim 1: time bin
+        @param float signal_start: Beginning of the signal window in s
+        @param float signal_end: End of the signal window in s
+        @param float norm_start: Beginning of the background window in s
+        @param float norm_end: End of the background window in s
+
+        @return numpy.ndarray, numpy.ndarray: analyzed data per laser pulse, error per laser pulse
+        """
+        # Get number of lasers
+        num_of_lasers = laser_data.shape[0]
+        #print('basic/num_of_lasers')
+        #print(num_of_lasers)
+        #print('basic/laser_data')
+        #print(laser_data)
+        # Get counter bin width
+        bin_width = self.fast_counter_settings.get('bin_width')
+        #print(bin_width)
+        if not isinstance(bin_width, float):
+            return np.zeros(num_of_lasers), np.zeros(num_of_lasers)
+
+        # Convert the times in seconds to bins (i.e. array indices)
+        signal_start_bin = round(signal_start / bin_width)
+        signal_end_bin = round(signal_end / bin_width)
+        norm_start_bin = round(norm_start / bin_width)
+        norm_end_bin = round(norm_end / bin_width)
+        #print(signal_start_bin)
+        #print(signal_end_bin)
+        #print(norm_start_bin)
+        #print('norm_start_binUP')
+        #print(norm_end_bin)
+        #print('norm_end_binUP')
+        # initialize data arrays for signal and measurement error
+        signal_data = np.empty(num_of_lasers, dtype=float)
+        error_data = np.empty(num_of_lasers, dtype=float)
+
+        # loop over all laser pulses and analyze them
+        for ii, laser_arr in enumerate(laser_data):
+            # calculate the sum and mean of the data in the normalization window
+            tmp_data = laser_arr[norm_start_bin:norm_end_bin]
+            #print('tmp_data')
+            #print(tmp_data)
+            #print(norm_start_bin)
+            #print(norm_end_bin)
+            #print(norm_start)
+            #print(norm_end)
+            #print(bin_width)
+            reference_sum = np.sum(tmp_data)
+            reference_mean = (reference_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
+
+            # calculate the sum and mean of the data in the signal window
+            tmp_data = laser_arr[signal_start_bin:signal_end_bin]
+            signal_sum = np.sum(tmp_data)
+            signal_mean = (signal_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
+            #print(signal_mean)
+            signal_data[ii] = signal_mean - reference_mean
+
+            # calculate with respect to gaussian error 'evolution'
+            #print('signal_data')
+            #print(signal_data)
+            error_data[ii] = signal_data[ii] * np.sqrt(1 / abs(signal_sum) + 1 / abs(reference_sum))
+
+        return signal_data, error_data
+    def analyse_mean_referenceLQNO(self, laser_data, signal_start=0.0, signal_end=200e-9, norm_start=300e-9,
                           norm_end=500e-9):
         """
         This method takes the mean of the signal window.
@@ -202,9 +332,13 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
         """
         # Get number of lasers
         num_of_lasers = laser_data.shape[0]
+        #print('basic/num_of_lasers')
+        #print(num_of_lasers)
+        #print('basic/laser_data')
+        #print(laser_data)
         # Get counter bin width
         bin_width = self.fast_counter_settings.get('bin_width')
-
+        #print(bin_width)
         if not isinstance(bin_width, float):
             return np.zeros(num_of_lasers), np.zeros(num_of_lasers)
 
@@ -213,7 +347,12 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
         signal_end_bin = round(signal_end / bin_width)
         norm_start_bin = round(norm_start / bin_width)
         norm_end_bin = round(norm_end / bin_width)
-
+        #print(signal_start_bin)
+        #print(signal_end_bin)
+        #print(norm_start_bin)
+        #print('norm_start_binUP')
+        #print(norm_end_bin)
+        #print('norm_end_binUP')
         # initialize data arrays for signal and measurement error
         signal_data = np.empty(num_of_lasers, dtype=float)
         error_data = np.empty(num_of_lasers, dtype=float)
@@ -222,6 +361,13 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
         for ii, laser_arr in enumerate(laser_data):
             # calculate the sum and mean of the data in the normalization window
             tmp_data = laser_arr[norm_start_bin:norm_end_bin]
+            #print('tmp_data')
+            #print(tmp_data)
+            #print(norm_start_bin)
+            #print(norm_end_bin)
+            #print(norm_start)
+            #print(norm_end)
+            #print(bin_width)
             reference_sum = np.sum(tmp_data)
             reference_mean = (reference_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
 
@@ -229,10 +375,12 @@ class BasicPulseAnalyzer(PulseAnalyzerBase):
             tmp_data = laser_arr[signal_start_bin:signal_end_bin]
             signal_sum = np.sum(tmp_data)
             signal_mean = (signal_sum / len(tmp_data)) if len(tmp_data) != 0 else 0.0
-
-            signal_data[ii] = signal_mean - reference_mean
+            #print(signal_mean)
+            signal_data[ii] = reference_mean
 
             # calculate with respect to gaussian error 'evolution'
+            #print('signal_data')
+            #print(signal_data)
             error_data[ii] = signal_data[ii] * np.sqrt(1 / abs(signal_sum) + 1 / abs(reference_sum))
 
         return signal_data, error_data

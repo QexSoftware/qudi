@@ -24,24 +24,14 @@ import numpy as np
 
 from core.connector import Connector
 from core.statusvariable import StatusVar
-from core.configoption import ConfigOption
 from core.util.mutex import Mutex
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 
 
 class PIDLogic(GenericLogic):
-    """ Logic module to monitor and control a PID process
-
-    Example config:
-
-    pidlogic:
-        module.Class: 'pid_logic.PIDLogic'
-        timestep: 0.1
-        connect:
-            controller: 'softpid'
-            savelogic: 'savelogic'
-
+    """
+    Control a process via software PID.
     """
 
     # declare connectors
@@ -50,7 +40,7 @@ class PIDLogic(GenericLogic):
 
     # status vars
     bufferLength = StatusVar('bufferlength', 1000)
-    timestep = ConfigOption('timestep', 100e-3)  # timestep in seconds
+    timestep = StatusVar(default=100)
 
     # signals
     sigUpdateDisplay = QtCore.Signal()
@@ -74,7 +64,7 @@ class PIDLogic(GenericLogic):
         self.enabled = False
         self.timer = QtCore.QTimer()
         self.timer.setSingleShot(True)
-        self.timer.setInterval(self.timestep * 1000)  # in ms
+        self.timer.setInterval(self.timestep)
         self.timer.timeout.connect(self.loop)
 
     def on_deactivate(self):
@@ -90,7 +80,7 @@ class PIDLogic(GenericLogic):
         """ Start the data recording loop.
         """
         self.enabled = True
-        self.timer.start(self.timestep * 1000)  # in ms
+        self.timer.start(self.timestep)
 
     def stopLoop(self):
         """ Stop the data recording loop.
@@ -106,7 +96,7 @@ class PIDLogic(GenericLogic):
         self.history[2, -1] = self._controller.get_setpoint()
         self.sigUpdateDisplay.emit()
         if self.enabled:
-            self.timer.start(self.timestep * 1000)  # in ms
+            self.timer.start(self.timestep)
 
     def getSavingState(self):
         """ Return whether we are saving data
