@@ -1,4 +1,3 @@
-# Hossein PIcoharp
 # -*- coding: utf-8 -*-
 """
 This file contains the Qudi hardware module for the PicoHarp300.
@@ -41,23 +40,45 @@ from interface.fast_counter_interface import FastCounterInterface
 class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
     """ Hardware class to use the NI card as a fast counter.
 
-    Written by Hossein Babashah, Hoda Shirzad
-
     Example config for copy-paste:
 
     NIfastcounter:
         module.Class: 'NIfastcounter.NIFastCounter'
-    """
+		PD_Channel: '/Dev1/PFI8' # photon counter channel
+		Clock_Channel: '/Dev1/Ctr2'
+		Clock_Channel2: '/Dev1/Ctr1' 
+		Clock_Channel3: '/Dev1/Ctr0'
+		Digital_Channel: '/Dev1/PFI0' # sync counter channel
+		Count_Type: '1' # '1' for digital, 0 for analogue 
+		Sync_Channel: "Dev1/ai3" # sync channel for AI aqusition
+		AI_Channel: "Dev1/ai2" # photodetector channel for AI aqusition
 
+    """
+    PD_Channel = ConfigOption(name='PD_Channel', default='/Dev3/PFI1', missing='warn')
+    Clock_Channel = ConfigOption(name='Clock_Channel', default='/Dev3/Ctr2', missing='warn')
+    Clock_Channel2 = ConfigOption(name='Clock_Channel2', default='/Dev3/Ctr1' , missing='warn')
+    Clock_Channel3 = ConfigOption(name='Clock_Channel3', default='/Dev3/Ctr0' , missing='warn')
+    Count_Type = ConfigOption(name='Count_Type', default='0', missing='warn')
+    Digital_Channel = ConfigOption(name='Digital_Channel', default='/Dev3/PFI2', missing='warn')
+    Sync_Channel = ConfigOption(name='Sync_Channel', default="Dev1/ai3", missing='warn')
+    AI_Channel = ConfigOption(name='AI_Channel', default="Dev1/ai2", missing='warn')
     sigReadoutNI = QtCore.Signal()
     sigStart = QtCore.Signal()
 
     def __init__(self, config, **kwargs):
-        print('__init__')
         # Modify ONLY for PulsedMeasurements
-        self.useNIcard = 0# analog input, APD
-        self.useNIcardDI = 1 # photon counter, SPC
         super().__init__(config=config, **kwargs)
+        print('PD channel')
+        print(self.PD_Channel)
+        print(self.Clock_Channel2)
+        print(self.Clock_Channel3)
+        print(self.Clock_Channel)
+        if self.Count_Type=='0':
+            self.useNIcard = 1# analog input, APD
+            self.useNIcardDI = 0
+        if self.Count_Type=='1':
+            self.useNIcard = 0# analog input, APD
+            self.useNIcardDI = 1 # photon counter, SPC
 
         # Just some default values:
         self._bin_width_ns = 2
@@ -70,7 +91,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         self.threadlock = Mutex()
 
     def on_activate(self):
-        print('on_activate')
 
         """ Activate and establish the connection to NI card and initialize.
         """
@@ -82,7 +102,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         time.sleep(0.2)
 
     def on_deactivate(self):
-        print('on_deactivate')
 
         """ Deactivates and disconnects the device.
         """
@@ -92,7 +111,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
 
 
     def start(self, acq_time):
-        print('start')
 
         """ Start acquisition for 'acq_time' ms.
         """
@@ -101,10 +119,10 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
             self.analog_input2 = daq.Task()
             self.read2 = daq.int32()
             self.myNIdata = np.zeros((self.NumberofSamples * self.Nchannel,), dtype=np.float64)
-            self.analog_input2.CreateAIVoltageChan("Dev1/ai3", "myChannelai3", daq.DAQmx_Val_Diff, self.VoltageMin,
+            self.analog_input2.CreateAIVoltageChan(self.Sync_Channel, "myChannelai3", daq.DAQmx_Val_Diff, self.VoltageMin,
                                                    self.VoltageMax,
                                                    daq.DAQmx_Val_Volts, None)  # SYNC
-            self.analog_input2.CreateAIVoltageChan("Dev1/ai2", "myChannelai2", daq.DAQmx_Val_Diff, self.VoltageMin,
+            self.analog_input2.CreateAIVoltageChan(self.AI_Channel, "myChannelai2", daq.DAQmx_Val_Diff, self.VoltageMin,
                                                    self.VoltageMax,
                                                    daq.DAQmx_Val_Volts, None)  # PD
             self.analog_input2.CfgAnlgEdgeStartTrig("myChannelai3", daq.DAQmx_Val_RisingSlope, 1)  # SYNC theshold
@@ -137,7 +155,7 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
             n_samples = 1000
             duty_cycle = 0.5
 
-            my_clock_channel = '/Dev3/Ctr2' #Hoda: '/Dev1/Ctr2' Hossein:'/Dev3/Ctr2' (should go to the config file)
+            my_clock_channel = self.Clock_Channel 
             self.Clock.CreateCOPulseChanFreq(my_clock_channel,
                                              "myClockTask",
                                              daq.DAQmx_Val_Hz,
@@ -152,7 +170,7 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
                 1000  # the buffer size
             )
 
-            ch2 ='/Dev3/Ctr1' #Hoda: '/Dev1/Ctr1' Hossein: '/Dev3/Ctr1'
+            ch2 =self.Clock_Channel2
             self.Counter2.CreateCISemiPeriodChan(
                 ch2,
                 'Counter Channel 1',  # The name to assign to the created virtual channel.
@@ -162,27 +180,19 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
                 daq.DAQmx_Val_Ticks,  # The units to use to return the measurement. Here are timebase ticks
                 ''
             )
-            #Hossein:
             self.Counter2.SetCISemiPeriodTerm(
                 ch2,  # assign a named Terminal
-                '/Dev3/Ctr2' + 'InternalOutput')
+                self.Clock_Channel + 'InternalOutput')
             self.Counter2.SetCICtrTimebaseSrc(ch2,
-                                              '/Dev3/PFI1')  # PFI7 is for dev1 and PFI1 for dev3 (It is for photon Counter(
+                                              self.PD_Channel)  # PFI7 is for dev1 and PFI1 for dev3 (It is for photon Counter(
 
 
-            # Hoda:
-            '''
-            self.Counter2.SetCISemiPeriodTerm(
-                ch2,  # assign a named Terminal
-                '/Dev1/Ctr2' + 'InternalOutput')
-            self.Counter2.SetCICtrTimebaseSrc(ch2,
-                                              '/Dev1/PFI8')  # photon source
-            '''
+
             self.Counter2.CfgImplicitTiming(daq.DAQmx_Val_ContSamps,
                                             2 ** 25
                                             # 2**30 is maximum. buffer length which stores  temporarily the number of generated samples
                                             )
-            ch = '/Dev3/Ctr0'#Hoda: '/Dev1/Ctr0', Hossein: '/Dev3/Ctr0'
+            ch = self.Clock_Channel3
             self.Counter1.CreateCISemiPeriodChan(
                 ch,  # use this counter channel. The name of the counter to use to create virtual channels.
                 'Counter Channel 1',  # The name to assign to the created virtual channel.
@@ -192,19 +202,12 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
                 daq.DAQmx_Val_Ticks,  # The units to use to return the measurement. Here are timebase ticks
                 ''  # customScaleName, in case of different units(DAQmx_Val_FromCustomScale).
                 )
-            '''
+
             self.Counter1.SetCISemiPeriodTerm(
                 ch,
-                '/Dev1/Ctr2' + 'InternalOutput')
+                self.Clock_Channel + 'InternalOutput')
             self.Counter1.SetCICtrTimebaseSrc(ch,
-                                        '/Dev1/PFI0') #sync
-            '''
-            #Hossein:
-            self.Counter1.SetCISemiPeriodTerm(
-                ch,
-                '/Dev3/Ctr2' + 'InternalOutput')
-            self.Counter1.SetCICtrTimebaseSrc(ch,
-                                              '/Dev3/PFI2')  # for Dev1 was PFI0
+                                              self.Digital_Channel)  # for Dev1 was PFI0
 
 
             self.Counter1.CfgImplicitTiming(daq.DAQmx_Val_ContSamps,
@@ -366,12 +369,7 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         # FIXME: actualle only an unsigned array will be needed. Change that later. WE fixed it!Not sure though!
 
         self.count = int(number_of_gates)
-        print('Picoharp/binwidth=')
-        print(self._bin_width_ns)
-        print(self.get_binwidth())
-        print(self._bin_width_ns * 1e3)
-        print(self._record_length_ns * 1e3)
-        print('Hello')
+
         self.mybins[0] = 1e-12
         self.firsttimeNI = 1
         self.result = []
@@ -380,8 +378,7 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         Resolution = self._bin_width_ns * 1e-9  # it should be in seconds
         Tm = self._record_length_ns * 1e-9  # it should be in seconds
         self.ACQtime = self._record_length_ns * 1e-9  # 10 second is ok, ACQ time in seconds
-        print('resolution')
-        print(self._bin_width_ns * 1e-9)
+
         self.period = Resolution * 2  # period/2 is the resolution
         self.NumberofSamples = int(np.ceil(Tm / Resolution))
         self.Sampling_rate = np.floor(1 / Resolution)
@@ -391,7 +388,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         self.VoltageMin = 0
         self.VoltageMax = 5
 
-        print('configuration is complete!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         return bin_width_ns, record_length_ns, number_of_gates
 
     def get_status(self):
@@ -418,7 +414,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         try:
             self.stop_measure()
             self.meas_run = False
-            print('pause measure l275')
         except:
             print('measurement not pauses')
 
@@ -432,7 +427,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         self.start(self._record_length_ns / 1e6)  # /1e6 was here
 
     def is_gated(self):
-        # print('is_gated')
 
         """
         Boolean return value indicates if the fast counter is a gated counter
@@ -441,7 +435,6 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
         return False
 
     def get_binwidth(self):
-        print('get_binwidth')
         """
         returns the width of a single timebin in the timetrace in seconds
         """
@@ -503,6 +496,7 @@ class NIFastCounter(Base, SlowCounterInterface, FastCounterInterface):
 
 
         if self.useNIcardDI == 1:
+            print('NIcardDI')
             _RWTimeout = 2
             n_read_samples = daq.int32()
 
