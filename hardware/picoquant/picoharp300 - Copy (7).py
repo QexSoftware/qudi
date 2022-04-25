@@ -116,8 +116,8 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
     def __init__(self, config, **kwargs):
         print('__init__')
         self.readtest = 0
-        self.useNIcard = 1 # analog input, APD
-        self.useNIcardDI = 0  # photon counter, SPC
+        self.useNIcard = 1
+        self.useNIcardDI = 0
         self.usePicoharp = 0
         super().__init__(config=config, **kwargs)
 
@@ -654,7 +654,6 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
                     self.Counter2.ClearTask()
                     self.Clock.StopTask()
                     self.Clock.ClearTask()
-                    #print('task stoped1')
                 except:
                     pass
 
@@ -734,8 +733,8 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
                     self.Clock.ClearTask()
                 self.Clock.StartTask()
     def stop_device(self):
+        print('stop_device')
 
-        print('stopdevice')
         """ Stop the measurement."""
         # print('stopmeasureL625')
         self.check(self._dll.PH_StopMeas(self._deviceID))
@@ -757,7 +756,6 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
             self.Counter2.ClearTask()
             self.Clock.StopTask()
             self.Clock.ClearTask()
-            print('Task Stopped2')
         except:
             pass
         self.analog_input2.StopTask()
@@ -1476,20 +1474,19 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
 
         if self.readtest == 1:
             # self.readtest=0
-            #print('here')
+            print('here')
             self.data_trace = np.int64(self.get_data_testfile())
-            if self.numberofsweeps < 30000 and self.meas_run:  # NI card number of Sweeps
+            if self.numberofsweeps < 2000 and self.meas_run:  # NI card number of Sweeps
                 self.numberofsweeps = self.numberofsweeps + 1
                 self.start_measure()
         # print(actual_counts)
-        #print('here')
+        print('here')
 
 
         timeout = 10.0
 
 
         if self.useNIcard == 1:
-           # time.sleep(0.01)
             self.analog_input2.ReadAnalogF64(self.numSampsPerChan, timeout, daq.DAQmx_Val_GroupByChannel, self.myNIdata,
                                              self.NumberofSamples * self.Nchannel, ctypes.byref(self.read2), None)
 
@@ -1519,7 +1516,7 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
                 self.data_trace = self.LaserSumhelper
                 self.analog_input2.StopTask()
                 self.analog_input2.ClearTask()
-                if self.numberofsweeps < 30000 and self.meas_run:  # NI card number of Sweeps
+                if self.numberofsweeps < 2000 and self.meas_run:  # NI card number of Sweeps
                     self.numberofsweeps = self.numberofsweeps + 1
                     self.start_measure()
             except:
@@ -1557,7 +1554,7 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
         if not self.meas_run:
             print('measurement is done2')
         # self.sigReadoutPicoharp.emit() # loop
-        #print('loop is ignored')
+        print('loop is ignored')
         # print('get_data_trace')
         """
         Polls the current timetrace data from the fast counter and returns it
@@ -1573,16 +1570,15 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
         # print(self.data_trace)
 
         if self.useNIcardDI == 1:
-    #        try:
-     #           self.Counter1.StopTask()
-      #          self.Counter1.ClearTask()
-       #         self.Counter2.StopTask()
-        #        self.Counter2.ClearTask()
-         #       self.Clock.StopTask()
-          #      self.Clock.ClearTask()
-           #     print('Task Stopped3')
-            #except:
-           #     print('exception2 Happened')             #This part has been commented in the new code
+            try:
+                self.Counter1.StopTask()
+                self.Counter1.ClearTask()
+                self.Counter2.StopTask()
+                self.Counter2.ClearTask()
+                self.Clock.StopTask()
+                self.Clock.ClearTask()
+            except:
+                print('exception2 Happened')
             Sync = self.count_data[0, :]
             Laser = self.count_data2[0, :]
             a = np.argwhere(Sync > 0.5)
@@ -1605,7 +1601,7 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
                 self.LaserSumhelper[0:np.size(LaserSum)] = LaserSum + self.LaserSumhelper[0:np.size(
                     LaserSum)]  # self.LaserSumhelper[0:np.size(LaserSum)]=LaserSum+self.LaserSumhelper[0:np.size(LaserSum)]
                 self.data_trace = self.LaserSumhelper
-                if self.numberofsweeps < 300000 and self.meas_run:  # NI card number of Sweeps
+                if self.numberofsweeps < 300 and self.meas_run:  # NI card number of Sweeps
                     self.numberofsweeps = self.numberofsweeps + 1
                     self.start_measure()
                     # print(np.nonzero(LaserSum))
@@ -1628,7 +1624,6 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
     def start_measure(self):
 
         print('start_measure')
-        #time.sleep(1)
         """
         Starts the fast counter.
         """
@@ -1647,16 +1642,6 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
         # print('start measure3')
 
     def stop_measure(self):
-        try:
-            self.Counter1.StopTask()
-            self.Counter1.ClearTask()
-            self.Counter2.StopTask()
-            self.Counter2.ClearTask()
-            self.Clock.StopTask()
-            self.Clock.ClearTask()
-            print('stop device stopeed')
-        except:
-            pass
         print('stop_measure')
         self.numberofsweeps = 0
         """ By setting the Flag, the measurement should stop.  """
@@ -1871,7 +1856,7 @@ class PicoHarp300(Base, SlowCounterInterface, FastCounterInterface):
                     # time.sleep(2)
             if self.startSweep == 1:
                 self.startSweep = 0
-                if self.numberofsweeps < 50000 and self.meas_run:
+                if self.numberofsweeps < 2000 and self.meas_run:
                     self.numberofsweeps = self.numberofsweeps + 1
                     self.start_measure()
                 # print('start Measure was here')

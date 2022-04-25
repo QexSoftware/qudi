@@ -45,6 +45,7 @@ class OceanOptics(Base, SpectrometerInterface):
         """
 
         self.spec = sb.Spectrometer.from_serial_number(self._serial)
+        print(self.spec)
         self.log.info(''.format(self.spec.model, self.spec.serial_number))
         self.spec.integration_time_micros(self._integration_time)
         self.log.info('Exposure set to {} microseconds'.format(self._integration_time))
@@ -59,6 +60,7 @@ class OceanOptics(Base, SpectrometerInterface):
 
             @return []: spectrum data
         """
+        #print('this is')
         wavelengths = self.spec.wavelengths()
         specdata = np.empty((2, len(wavelengths)), dtype=np.double)
         specdata[0] = wavelengths/1e9

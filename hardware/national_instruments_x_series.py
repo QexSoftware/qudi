@@ -112,8 +112,8 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
 
     # odmr
     _odmr_trigger_channel = ConfigOption('odmr_trigger_channel', missing='error')
-    _odmr_trigger_line = ConfigOption('odmr_trigger_line', 'Dev1/port0/line0', missing='warn')
-    _odmr_switch_line = ConfigOption('odmr_switch_line', 'Dev1/port0/line1', missing='warn')
+    _odmr_trigger_line = ConfigOption('odmr_trigger_line', 'Dev3/port0/line0', missing='warn')
+    _odmr_switch_line = ConfigOption('odmr_switch_line', 'Dev3/port0/line1', missing='warn')
 
     _gate_in_channel = ConfigOption('gate_in_channel', missing='error')
     # number of readout samples, mainly used for gated counter
@@ -1229,12 +1229,14 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
                 # Analog in channel timebase
                 daq.DAQmxCfgSampClkTiming(
                     self._scanner_analog_daq_task,
-                    self._scanner_clock_channel + 'InternalOutput',
+                    "",
                     self._scanner_clock_frequency,
                     daq.DAQmx_Val_Rising,
                     daq.DAQmx_Val_ContSamps,
                     self._line_length + 1
                 )
+                print('ni1238\self._line_length + 1')
+                print(self._line_length + 1)
         except:
             self.log.exception('Error while setting up scanner to scan a line.')
             return -1
@@ -1630,15 +1632,16 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
                     daq.DAQmx_Val_DoNotOverwriteUnreadSamps)
 
             # Analog
+            self.SamplePerStep=self.oversampling
             if self._scanner_ai_channels:
                 # Analog in channel timebase
                 daq.DAQmxCfgSampClkTiming(
                     self._scanner_analog_daq_task,
-                    self._scanner_clock_channel + 'InternalOutput',
-                    self._scanner_clock_frequency,
+                    "",
+                    self._scanner_clock_frequency*self.SamplePerStep,
                     daq.DAQmx_Val_Rising,
                     daq.DAQmx_Val_ContSamps,
-                    self._odmr_length + 1
+                    (self._odmr_length + 1)*self.SamplePerStep
                 )
 
             if self._odmr_pulser_daq_task:
@@ -1785,7 +1788,7 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
             # Analog
             if self._scanner_ai_channels:
                 odmr_analog_data = np.full(
-                    (len(self._scanner_ai_channels), self._odmr_length + 1),
+                    (len(self._scanner_ai_channels), (self._odmr_length + 1)*self.SamplePerStep),
                     222,
                     dtype=np.float64)
 
@@ -1793,14 +1796,20 @@ class NationalInstrumentsXSeries(Base, SlowCounterInterface, ConfocalScannerInte
 
                 daq.DAQmxReadAnalogF64(
                     self._scanner_analog_daq_task,
-                    self._odmr_length + 1,
+                    (self._odmr_length + 1)*self.SamplePerStep,
                     self._RWTimeout,
                     daq.DAQmx_Val_GroupByChannel,
                     odmr_analog_data,
-                    len(self._scanner_ai_channels) * (self._odmr_length + 1),
+                    len(self._scanner_ai_channels) * (self._odmr_length + 1)*self.SamplePerStep,
                     daq.byref(analog_read_samples),
                     None
                 )
+                print(np.shape(odmr_analog_data))
+                self.odmr_analog_data2 = np.reshape(odmr_analog_data, ((self._odmr_length + 1)*2, self.SamplePerStep))
+                print(self.odmr_analog_data2)
+                odmr_analog_data = np.mean(self.odmr_analog_data2, 1)
+                print(np.shape(odmr_analog_data))
+                odmr_analog_data=np.reshape(odmr_analog_data,(2,self._odmr_length + 1))
 
             # stop the counter task
             daq.DAQmxStopTask(self._scanner_clock_daq_task)

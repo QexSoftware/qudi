@@ -28,6 +28,7 @@ import time
 import nidaqmx as ni
 from nidaqmx._lib import lib_importer  # Due to NIDAQmx C-API bug needed to bypass property getter
 from nidaqmx.stream_readers import AnalogMultiChannelReader, CounterReader
+from nidaqmx.constants import TerminalConfiguration
 
 from core.module import Base
 from core.configoption import ConfigOption
@@ -1007,7 +1008,7 @@ class NIXSeriesInStreamer(Base, DataInStreamInterface):
 
         try:
             ai_ch_str = ','.join(['/{0}/{1}'.format(self._device_name, c) for c in analog_channels])
-            ai_task.ai_channels.add_ai_voltage_chan(ai_ch_str,
+            ai_task.ai_channels.add_ai_voltage_chan(ai_ch_str,terminal_config = TerminalConfiguration.RSE,
                                                     max_val=max(self._adc_voltage_range),
                                                     min_val=min(self._adc_voltage_range))
             ai_task.timing.cfg_samp_clk_timing(sample_freq,
@@ -1080,16 +1081,16 @@ class NIXSeriesInStreamer(Base, DataInStreamInterface):
         self._di_readers = list()
         self._ai_reader = None
 
-        while len(self._di_task_handles) > 0:
+        for i in range(len(self._di_task_handles)):
             try:
-                if not self._di_task_handles[-1].is_task_done():
-                    self._di_task_handles[-1].stop()
-                self._di_task_handles[-1].close()
+                if not self._di_task_handles[i].is_task_done():
+                    self._di_task_handles[i].stop()
+                self._di_task_handles[i].close()
             except ni.DaqError:
                 self.log.exception('Error while trying to terminate digital counter task.')
                 err = -1
             finally:
-                del self._di_task_handles[-1]
+                del self._di_task_handles[i]
         self._di_task_handles = list()
 
         if self._ai_task_handle is not None:

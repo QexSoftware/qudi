@@ -23,156 +23,162 @@ import visa
 import time
 from core.module import Base
 from core.configoption import ConfigOption
-from core.statusvariable import StatusVar
-from core.util.mutex import RecursiveMutex
+from core.util.mutex import Mutex
 from interface.switch_interface import SwitchInterface
 
 
 class FlipMirror(Base, SwitchInterface):
-    """ This class is implements communication with the Radiant Dyes flip mirror driver using pyVISA
+    """ This class is implements communication with the Radiant Dyes flip mirror driver
+        through pyVISA.
 
     Example config for copy-paste:
 
     flipmirror_switch:
         module.Class: 'switches.flipmirror.FlipMirror'
         interface: 'ASRL1::INSTR'
-        name: 'Flipmirror Switch'  # optional
-        switch_time: 2  # optional
-        remember_states: False  # optional
-        switch_name: 'Detection'  # optional
-        switch_states: ['Spectrometer', 'APD']  # optional
+
     """
 
-    # ConfigOptions to give the single switch and its states custom names
-    _switch_name = ConfigOption(name='switch_name', default='1', missing='nothing')
-    _switch_states = ConfigOption(name='switch_states', default=['Down', 'Up'], missing='nothing')
-    # optional name of the hardware
-    _hardware_name = ConfigOption(name='name', default='Flipmirror Switch', missing='nothing')
-    # if remember_states is True the last state will be restored at reloading of the module
-    _remember_states = ConfigOption(name='remember_states', default=False, missing='nothing')
-    # switch_time to wait after setting the states for the solenoids to react
-    _switch_time = ConfigOption(name='switch_time', default=2.0, missing='nothing')
-    # name of the serial interface where the hardware is connected.
-    # Use e.g. the Keysight IO connections expert to find the device.
-    serial_interface = ConfigOption('interface', 'ASRL1::INSTR', missing='error')
+    serial_interface = ConfigOption('interface', 'ASRL1::INSTR', missing='warn')
 
-    # StatusVariable for remembering the last state of the hardware
-    _states = StatusVar(name='states', default=None)
+    def __init__(self, config, **kwargs):
+        """ Creae flip mirror control module
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.lock = RecursiveMutex()
-        self._resource_manager = None
-        self._instrument = None
-        self._switches = dict()
+          @param object manager: reference to module manager
+          @param str name: unique module name
+          @param dict config; configuration parameters in a dict
+          @param dict kwargs: aditional parameters in a dict
+        """
+        super().__init__(config=config, **kwargs)
+        self.lock = Mutex()
 
     def on_activate(self):
         """ Prepare module, connect to hardware.
         """
-        assert isinstance(self._switch_name, str), 'ConfigOption "switch_name" must be str type'
-        assert len(self._switch_states) == 2, 'ConfigOption "switch_states" must be len 2 iterable'
-        self._switches = self._chk_refine_available_switches(
-            {self._switch_name: self._switch_states}
+        self.rm = visa.ResourceManager()
+        self.inst = self.rm.open_resource(
+                self.serial_interface,
+                baud_rate=115200,
+                write_termination='\r\n',
+                read_termination='\r\n',
+                timeout=10,
+                send_end=True
         )
-
-        self._resource_manager = visa.ResourceManager()
-        self._instrument = self._resource_manager.open_resource(
-            self.serial_interface,
-            baud_rate=115200,
-            write_termination='\r\n',
-            read_termination='\r\n',
-            timeout=10,
-            send_end=True
-        )
-
-        # reset states if requested, otherwise use the saved states
-        if self._remember_states and isinstance(self._states, dict) and \
-                set(self._states) == set(self._switches):
-            self._states = {switch: self._states[switch] for switch in self._switches}
-            self.states = self._states
-        else:
-            self._states = dict()
-            self.states = {switch: states[0] for switch, states in self._switches.items()}
 
     def on_deactivate(self):
         """ Disconnect from hardware on deactivation.
         """
-        self._instrument.close()
-        self._resource_manager.close()
+        self.inst.close()
+        self.rm.close()
 
-    @property
-    def name(self):
-        """ Name of the hardware as string.
+    def getNumberOfSwitches(self):
+        """ Gives the number of switches connected to this hardware.
 
-        @return str: The name of the hardware
+          @return int: number of swiches on this hardware
         """
-        return self._hardware_name
+        return 1
 
-    @property
-    def available_states(self):
-        """ Names of the states as a dict of tuples.
+    def getSwitchState(self, switchNumber):
+        """ Gives state of switch.
 
-        The keys contain the names for each of the switches. The values are tuples of strings
-        representing the ordered names of available states for each switch.
+          @param int switchNumber: number of switch
 
-        @return dict: Available states per switch in the form {"switch": ("state1", "state2")}
-        """
-        return self._switches.copy()
-
-    @property
-    def states(self):
-        """ The current states the hardware is in.
-
-        The states of the system as a dict consisting of switch names as keys and state names as values.
-
-        @return dict: All the current states of the switches in a state dict of the form {"switch": "state"}
+          @return bool: True if vertical, False if horizontal, None on error
         """
         with self.lock:
-            response = self._instrument.query('GP1').strip().upper()
-            assert response in {'H1', 'V1'}, f'Unexpected hardware return value: "{response}"'
-            switch, avail_states = next(iter(self.available_states.items()))
-            self._states = {switch: avail_states[int(response == 'V1')]}
-            return self._states.copy()
+            pos = self.inst.ask('GP1')
+            if pos == 'H1':
+                return False
+            elif pos == 'V1':
+                return True
+            else:
+                return None
 
-    @states.setter
-    def states(self, state_dict):
-        """ The setter for the states of the hardware.
+    def getCalibration(self, switchNumber, state):
+        """ Get calibration parameter for switch.
 
-        The states of the system can be set by specifying a dict that has the switch names as keys
-        and the names of the states as values.
+          @param int switchNumber: number of switch for which to get calibration parameter
+          @param str switchState: state ['On', 'Off'] for which to get calibration parameter
 
-        @param dict state_dict: state dict of the form {"switch": "state"}
+          @return str: calibration parameter fir switch and state.
+
+        In this case, the calibration parameter is a integer number that says where the
+        horizontal and vertical position of the flip mirror is in the 16 bit PWM range of the motor driver.
+        The number is returned as a string, not as an int, and needs to be converted.
         """
-        assert isinstance(state_dict, dict), \
-            f'Property "state" must be dict type. Received: {type(state_dict)}'
-        assert all(switch in self.available_states for switch in state_dict), \
-            f'Invalid switch name(s) encountered: {tuple(state_dict)}'
-        assert all(isinstance(state, str) for state in state_dict.values()), \
-            f'Invalid switch state(s) encountered: {tuple(state_dict.values())}'
+        with self.lock:
+            try:
+                if state == 'On':
+                    answer = self.inst.ask('GVT1')
+                else:
+                    answer = self.inst.ask('GHT1')
+                result = int(answer.split('=')[1])
+            except:
+                result = -1
+            return result
 
-        if state_dict:
-            with self.lock:
-                switch, state = next(iter(state_dict.items()))
-                down = self.available_states[switch][0] == state
-                answer = self._instrument.query('SH1' if down else 'SV1', delay=self._switch_time)
-                assert answer == 'OK1', \
-                    f'setting of state "{state}" in switch "{switch}" failed with return value "{answer}"'
-                self._states = {switch: state}
-                self.log.debug('{0}-{1}: {2}'.format(self.name, switch, state))
+    def setCalibration(self, switchNumber, state, value):
+        """ Set calibration parameter for switch.
 
-    def get_state(self, switch):
-        """ Query state of single switch by name
+          @param int switchNumber: number of switch for which to get calibration parameter
+          @param str switchState: state ['On', 'Off'] for which to get calibration parameter
+          @param int value: calibration parameter to be set.
 
-        @param str switch: name of the switch to query the state for
-        @return str: The current switch state
+          @return bool: True if success, False on error
         """
-        assert switch in self.available_states, f'Invalid switch name: "{switch}"'
-        return self.states[switch]
+        with self.lock:
+            try:
+                answer = self.inst.ask('SHT1 {0}'.format(int(value)))
+                if answer != 'OK1':
+                    return False
+            except:
+                return False
+            return True
 
-    def set_state(self, switch, state):
-        """ Query state of single switch by name
+    def switchOn(self, switchNumber):
+        """ Turn the flip mirror to vertical position.
 
-        @param str switch: name of the switch to change
-        @param str state: name of the state to set
+          @param int switchNumber: number of switch to be switched
+
+          @return bool: True if suceeds, False otherwise
         """
-        self.states = {switch: state}
+        with self.lock:
+            try:
+                answer = self.inst.ask('SV1')
+                if answer != 'OK1':
+                    return False
+                time.sleep(self.getSwitchTime(switchNumber))
+                self.log.info('{0} switch {1}: On'.format(
+                    self._name, switchNumber))
+            except:
+                return False
+            return True
+
+    def switchOff(self, switchNumber):
+        """ Turn the flip mirror to horizontal position.
+
+          @param int switchNumber: number of switch to be switched
+
+          @return bool: True if suceeds, False otherwise
+        """
+        with self.lock:
+            try:
+                answer = self.inst.ask('SH1')
+                if answer != 'OK1':
+                    return False
+                time.sleep(self.getSwitchTime(switchNumber))
+                self.log.info('{0} switch {1}: Off'.format(
+                    self._name, switchNumber))
+            except:
+                return False
+            return True
+
+
+    def getSwitchTime(self, switchNumber):
+        """ Give switching time for switch.
+
+          @param int switchNumber: number of switch
+
+          @return float: time needed for switch state change
+        """
+        return 2.0

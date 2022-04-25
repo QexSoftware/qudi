@@ -101,7 +101,7 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
             @return MicrowaveLimits: device-specific parameter limits
         """
         limits = MicrowaveLimits()
-        limits.supported_modes = (MicrowaveMode.CW, MicrowaveMode.SWEEP)
+        limits.supported_modes = (MicrowaveMode.CW , MicrowaveMode.LIST , MicrowaveMode.SWEEP)
 
         # values for SMBV100A
         limits.min_power = -145
@@ -111,11 +111,11 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
         limits.max_frequency = 6e9
 
         if self.model == 'SMBV100B':
-            limits.max_frequency = 10e9
+            limits.max_frequency = 3e9
 
         limits.list_minstep = 0.1
         limits.list_maxstep = limits.max_frequency - limits.min_frequency
-        limits.list_maxentries = 1
+        limits.list_maxentries =4000
 
         limits.sweep_minstep = 0.1
         limits.sweep_maxstep = limits.max_frequency - limits.min_frequency
@@ -138,10 +138,18 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
         if not is_running:
             return 0
 
+        if mode == 'list':
+            self._command_wait(':FREQ:MODE CW')
+
+
         self._connection.write('OUTP:STAT OFF')
         self._connection.write('*WAI')
         while int(float(self._connection.query('OUTP:STAT?'))) != 0:
             time.sleep(0.2)
+
+        if mode == 'list':
+            self._command_wait(':LIST:LEARN')
+            self._command_wait(':FREQ:MODE LIST')
         return 0
 
     def get_status(self):
@@ -163,8 +171,12 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
 
         @return float: the power set at the device in dBm
         """
-        # This case works for cw AND sweep mode
-        return float(self._connection.query(':POW?'))
+        mode, dummy = self.get_status()
+        if mode == 'list':
+            return float(self._connection.query(':LIST:POW?'))
+        else:
+            # This case works for cw AND sweep mode
+            return float(self._connection.query(':POW?'))
 
     def get_frequency(self):
         """
@@ -183,6 +195,10 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
             stop = float(self._connection.query(':FREQ:STOP?'))
             step = float(self._connection.query(':SWE:STEP?'))
             return_val = [start+step, stop, step]
+        elif 'list' in mode:
+            # Exclude first frequency entry (duplicate due to trigger issues)
+            frequency_str = self._connection.query(':LIST:FREQ?').split(',', 1)[1]
+            return_val = np.array([float(freq) for freq in frequency_str.split(',')])
         return return_val
 
     def cw_on(self):
@@ -251,8 +267,22 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
 
         @return int: error code (0:OK, -1:error)
         """
-        self.log.error('List mode not available for this microwave hardware!')
-        return -1
+        current_mode, is_running = self.get_status()
+        if is_running:
+            if current_mode == 'list':
+                return 0
+            else:
+                self.off()
+
+        # This needs to be done due to stupid design of the list mode (sweep is better)
+        self.cw_on()
+        self._command_wait(':LIST:LEARN')
+        self._command_wait(':FREQ:MODE LIST')
+        dummy, is_running = self.get_status()
+        while not is_running:
+            time.sleep(0.2)
+            dummy, is_running = self.get_status()
+        return 0
 
     def set_list(self, frequency=None, power=None):
         """
@@ -266,11 +296,55 @@ class MicrowaveSmbv(Base, MicrowaveInterface):
             current power in dBm,
             current mode
         """
+        mode, is_running = self.get_status()
+        if is_running:
+            self.off()
 
-        return int: error code (0:OK, -1:error)
+        # Cant change list parameters if in list mode
+        if mode != 'cw':
+            self.set_cw()
 
-        self.log.error('List mode not available for this microwave hardware!')
-        return -1
+        self._connection.write(":LIST:SEL 'QUDI'")
+        self._connection.write('*WAI')
+
+        # Set list frequencies
+        if frequency is not None:
+            s = ' {0:f},'.format(frequency[0])
+            for f in frequency[:-1]:
+                s += ' {0:f},'.format(f)
+            s += ' {0:f}'.format(frequency[-1])
+            self._connection.write(':LIST:FREQ' + s)
+            self._connection.write('*WAI')
+            self._connection.write(':LIST:MODE STEP')
+            self._connection.write('*WAI')
+
+        # Set list power
+        if power is not None:
+            self._connection.write(':LIST:POW {0:f}'.format(power))
+            self._connection.write('*WAI')
+
+        self._command_wait(':TRIG1:LIST:SOUR EXT')
+
+        # Apply settings in hardware
+        self._command_wait(':LIST:LEARN')
+        # If there are timeout  problems after this command, update the smiq  firmware to > 5.90
+        # as there was a problem with excessive wait times after issuing :LIST:LEARN over a
+        # GPIB connection in firmware 5.88
+        self._command_wait(':FREQ:MODE LIST')
+
+        actual_freq = self.get_frequency()
+        actual_power = self.get_power()
+        mode, dummy = self.get_status()
+        return actual_freq, actual_power, mode
+
+    def reset_listpos(self):
+        """
+        Reset of MW list mode position to start (first frequency step)
+
+        @return int: error code (0:OK, -1:error)
+        """
+        self._command_wait(':ABOR:LIST')
+        return 0
 
     def sweep_on(self):
         """ Switches on the sweep mode.
